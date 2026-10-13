@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { DeliverySettings } from "./delivery";
 import classico from "@/assets/p-classico.jpg";
 import bacon from "@/assets/p-bacon.jpg";
 import combo from "@/assets/p-combo.jpg";
@@ -25,12 +26,12 @@ export type OrderItem = { productId: string; name: string; price: number; qty: n
 export type Order = {
   id: string; createdAt: string; customer: string; phone: string; address: string;
   pickup: boolean; payment: Payment; items: OrderItem[]; notes: string;
-  subtotal: number; fee: number; total: number; status: OrderStatus; scheduledFor?: string;
+  subtotal: number; fee: number; total: number; status: OrderStatus; scheduledFor?: string; distanceKm?: number; neighborhood?: string;
 };
 export type Settings = {
   name: string; logo: string; whatsapp: string; deliveryFee: number; deliveryTime: string;
   minOrder: number; areas: string; pickup: boolean; address: string; instagram: string;
-  override: null | "closed" | "open"; hours: DayHours[]; specials: Special[];
+  override: null | "closed" | "open"; hours: DayHours[]; specials: Special[]; delivery?: DeliverySettings;
 };
 export type State = { settings: Settings; products: Product[]; orders: Order[] };
 
@@ -151,8 +152,8 @@ export function storeStatus(s: Settings, d = new Date()): Status {
   if (s.override === "open") return { open: true, message: "Aberto agora" };
   const inShift = !today.closed && today.shifts.some((sh) => now.minutes >= toMin(sh.open) && now.minutes < toMin(sh.close));
   if (s.override !== "closed" && inShift) {
-    const sh = today.shifts.find((x) => now.minutes < toMin(x.close))!;
-    return { open: true, message: `Aberto agora · até ${sh.close}` };
+    const sh = today.shifts.find((x) => now.minutes >= toMin(x.open) && now.minutes < toMin(x.close));
+    if (sh) return { open: true, message: `Aberto agora · até ${sh.close}` };
   }
   // próximo horário
   if (!today.closed) {

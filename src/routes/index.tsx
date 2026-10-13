@@ -1,5 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { Button } from "@/components/Button";
+import { calculateDelivery, type DeliveryLocation } from "@/lib/delivery";
+import { getDeliveryDistance, startDeliverySession } from "@/lib/delivery.functions";
 import { ShoppingBag, Search, Plus, Minus, Trash2, X, Clock, Bike, Wallet, MapPin, Store, Instagram, Phone, CalendarClock } from "lucide-react";
 import hero from "@/assets/hero.jpg";
 import { Logo } from "@/components/Logo";
@@ -81,7 +85,7 @@ function Home() {
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           <Info icon={<Clock />} t="Entrega" v={settings.deliveryTime} />
-          <Info icon={<Bike />} t="Taxa" v={brl(settings.deliveryFee)} />
+          <Info icon={<Bike />} t="Taxa" v={settings.delivery?.model === "km" ? `${brl(settings.delivery.perKm)}/km` : "Conforme endereço"} />
           <Info icon={<Wallet />} t="Pedido mínimo" v={brl(settings.minOrder)} />
           <Info icon={<Store />} t="Retirada" v={settings.pickup ? "Sim, no local" : "Não"} />
         </div>
@@ -191,10 +195,42 @@ function Cart({ cart, setCart, onClose, status }: { cart: CartLine[]; setCart: R
   const [step, setStep] = useState<"cart" | "checkout">("cart");
   const [f, setF] = useState({ name: "", phone: "", address: "", pickup: false, payment: "Pix" as Payment, schedule: false });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const startSession = useServerFn(startDeliverySession);
+  const lookupDistance = useServerFn(getDeliveryDistance);
+  const [quote, setQuote] = useState<{ key: string; location: DeliveryLocation } | null>(null);
+  const [calculating, setCalculating] = useState(false);
+  const [deliveryError, setDeliveryError] = useState("");
+  const requestId = useRef(0);
+  const cached = useRef(new Map<string, { location: DeliveryLocation; expires: number }>());
+  const quoteKey = JSON.stringify([settings.address, f.address.trim()]);
+  const location = quote?.key === quoteKey ? quote.location : null;
+  const pricing = settings.delivery && location ? calculateDelivery(settings.delivery, location.distanceKm, location.neighborhood) : null;
+  const deliveryReady = f.pickup || Boolean(pricing?.allowed);
+  const calculate = async () => {
+    if (calculating) return;
+    if (!settings.delivery) { setDeliveryError("A loja ainda não configurou a entrega. Entre em contato ou escolha retirada."); return; }
+    if (f.address.trim().length < 10) { setDeliveryError("Informe rua, número, bairro e cidade."); return; }
+    const current = ++requestId.current;
+    setCalculating(true); setDeliveryError(""); setQuote(null);
+    try {
+      const saved = cached.current.get(quoteKey);
+      let result: DeliveryLocation;
+      if (saved && saved.expires > Date.now()) result = saved.location;
+      else {
+        await startSession();
+        result = await lookupDistance({ data: { origin: settings.address, destination: f.address.trim() } });
+        if (cached.current.size >= 10) cached.current.clear();
+        cached.current.set(quoteKey, { location: result, expires: Date.now() + 300000 });
+      }
+      if (current === requestId.current) setQuote({ key: quoteKey, location: result });
+    } catch (error) { if (current === requestId.current) setDeliveryError(error instanceof Error ? error.message : "Não foi possível calcular a entrega. Tente novamente."); }
+    finally { if (current === requestId.current) setCalculating(false); }
+  };
+  const changeAddress = (address: string) => { requestId.current++; setCalculating(false); setQuote(null); setDeliveryError(""); setF({ ...f, address }); };
 
-  const lines = useMemo(() => cart.map((l) => ({ ...l, p: products.find((p) => p.id === l.id)! })).filter((l) => l.p), [cart, products]);
+  const lines = useMemo(() => cart.flatMap((l) => { const p = products.find((p) => p.id === l.id); return p ? [{ ...l, p }] : []; }), [cart, products]);
   const subtotal = lines.reduce((s, l) => s + l.p.price * l.qty, 0);
-  const fee = f.pickup ? 0 : settings.deliveryFee;
+  const fee = f.pickup ? 0 : pricing?.allowed ? pricing.fee : 0;
   const total = subtotal + (lines.length ? fee : 0);
   const qty = (id: string, d: number) => setCart((c) => c.map((l) => (l.id === id ? { ...l, qty: Math.max(1, l.qty + d) } : l)));
   const canOrder = status.open || f.schedule;
@@ -204,17 +240,20 @@ function Cart({ cart, setCart, onClose, status }: { cart: CartLine[]; setCart: R
     if (f.name.trim().length < 2) e.name = "Informe seu nome.";
     if (f.phone.replace(/\D/g, "").length < 10) e.phone = "Informe um telefone válido com DDD.";
     if (!f.pickup && f.address.trim().length < 5) e.address = "Informe o endereço de entrega.";
+    if (!deliveryReady) e.address = pricing?.message ?? "Calcule e confirme a taxa de entrega antes de finalizar.";
+    if (!lines.length || lines.some((l) => !l.p.available)) e.min = "Confira o carrinho: há produtos indisponíveis.";
     if (subtotal < settings.minOrder) e.min = `Pedido mínimo de ${brl(settings.minOrder)}.`;
     setErrors(e);
     if (Object.keys(e).length) return;
     const items = lines.map((l) => ({ productId: l.id, name: l.p.name, price: l.p.price, qty: l.qty }));
-    setState((s) => ({ ...s, orders: [{ id: uid(), createdAt: new Date().toISOString(), customer: f.name, phone: f.phone, address: f.address, pickup: f.pickup, payment: f.payment, items, notes, subtotal, fee, total, status: "Novo", scheduledFor: !status.open ? status.nextOpen : undefined }, ...s.orders] }));
+    setState((s) => ({ ...s, orders: [{ id: uid(), createdAt: new Date().toISOString(), customer: f.name, phone: f.phone, address: f.pickup ? "" : location?.address ?? f.address, pickup: f.pickup, payment: f.payment, items, notes, subtotal, fee, total, status: "Novo", distanceKm: f.pickup ? undefined : location?.distanceKm, neighborhood: f.pickup ? undefined : location?.neighborhood, scheduledFor: !status.open ? status.nextOpen : undefined }, ...s.orders] }));
     const msg = [
       `*Novo pedido – ${settings.name}*`,
       ...items.map((i) => `${i.qty}x ${i.name} – ${brl(i.price * i.qty)}`),
       notes && `Obs.: ${notes}`,
       `Subtotal: ${brl(subtotal)}`, `Entrega: ${brl(fee)}`, `*Total: ${brl(total)}*`, "",
-      `Nome: ${f.name}`, `Telefone: ${f.phone}`, f.pickup ? "Retirada no local" : `Endereço: ${f.address}`,
+      `Nome: ${f.name}`, `Telefone: ${f.phone}`, f.pickup ? "Retirada no local" : `Endereço: ${location?.address ?? f.address}`,
+      !f.pickup && location ? `Distância: ${location.distanceKm.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km` : "",
       `Pagamento: ${f.payment}`, !status.open && status.nextOpen ? `Agendado para: ${status.nextOpen.replace("T", " às ")}` : "",
     ].filter(Boolean).join("\n");
     window.open(`https://wa.me/${settings.whatsapp}?text=${encodeURIComponent(msg)}`, "_blank");
@@ -258,11 +297,19 @@ function Cart({ cart, setCart, onClose, status }: { cart: CartLine[]; setCart: R
               <Field label="Telefone" error={errors.phone}><input className="field" inputMode="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
               {settings.pickup && (
                 <div className="grid grid-cols-2 gap-2">
-                  <button onClick={() => setF({ ...f, pickup: false })} className={f.pickup ? "btn-ghost" : "btn"}>Entrega</button>
-                  <button onClick={() => setF({ ...f, pickup: true })} className={f.pickup ? "btn" : "btn-ghost"}>Retirada</button>
+                   <Button onClick={() => setF({ ...f, pickup: false })} variant={f.pickup ? "ghost" : "primary"}>Cadastrar endereço</Button>
+                   <Button onClick={() => setF({ ...f, pickup: true })} variant={f.pickup ? "primary" : "ghost"}>Retirada no local</Button>
                 </div>
               )}
-              {!f.pickup && <Field label="Endereço" error={errors.address}><input className="field" value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} /></Field>}
+               {!f.pickup && <div className="space-y-3">
+                 <Field label="Endereço completo" error={errors.address}><input className="field" maxLength={250} autoComplete="street-address" placeholder="Rua, número, bairro e cidade" value={f.address} onChange={(e) => changeAddress(e.target.value)} /></Field>
+                 <Button variant="ghost" className="w-full" disabled={calculating || f.address.trim().length < 10} onClick={() => void calculate()}><MapPin className="h-4 w-4" />{calculating ? "Calculando…" : "Calcular entrega"}</Button>
+                 {deliveryError && <p role="alert" className="text-sm font-semibold text-destructive break-words">{deliveryError}</p>}
+                 {location && <div role="status" className="space-y-1 border-l-2 border-primary pl-3 text-sm">
+                   <p>{location.address}</p><p>{location.distanceKm.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km{location.neighborhood ? ` · ${location.neighborhood}` : ""}</p>
+                   <p className={pricing?.allowed ? "font-semibold text-success" : "font-semibold text-destructive"}>{pricing?.message}</p>
+                 </div>}
+               </div>}
               <div><p className="mb-1 font-semibold">Pagamento</p>
                 <div className="grid grid-cols-3 gap-2">{PAYMENTS.map((p) => <button key={p} onClick={() => setF({ ...f, payment: p })} className={f.payment === p ? "btn px-2" : "btn-ghost px-2"}>{p}</button>)}</div>
               </div>
@@ -271,8 +318,8 @@ function Cart({ cart, setCart, onClose, status }: { cart: CartLine[]; setCart: R
         </div>
         {lines.length > 0 && (
           <div className="space-y-2 border-t p-4">
-            <Row k="Subtotal" v={brl(subtotal)} /><Row k={f.pickup ? "Retirada" : "Entrega"} v={brl(fee)} />
-            <div className="flex justify-between text-xl font-extrabold"><span>Total</span><span className="text-primary">{brl(total)}</span></div>
+             <Row k="Subtotal" v={brl(subtotal)} /><Row k={f.pickup ? "Retirada" : "Entrega"} v={deliveryReady ? brl(fee) : "A calcular"} />
+             <div className="flex justify-between text-xl font-extrabold"><span>{deliveryReady ? "Total" : "Total parcial"}</span><span className="text-primary">{brl(total)}</span></div>
             {errors.min && <p className="text-sm font-semibold text-destructive">{errors.min}</p>}
             {!status.open && (
               <div className="rounded-xl bg-destructive/10 p-3 text-sm">
@@ -285,7 +332,7 @@ function Cart({ cart, setCart, onClose, status }: { cart: CartLine[]; setCart: R
             {step === "cart" ? (
               <button className="btn w-full" disabled={!canOrder} onClick={() => setStep("checkout")}>Continuar</button>
             ) : (
-              <div className="flex gap-2"><button className="btn-ghost" onClick={() => setStep("cart")}>Voltar</button><button className="btn flex-1" disabled={!canOrder} onClick={submit}>Enviar pelo WhatsApp</button></div>
+               <div className="flex gap-2"><Button variant="ghost" onClick={() => setStep("cart")}>Voltar</Button><Button className="flex-1" disabled={!canOrder || !deliveryReady || calculating} onClick={submit}>Enviar pelo WhatsApp</Button></div>
             )}
           </div>
         )}
