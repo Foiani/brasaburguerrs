@@ -1,5 +1,5 @@
 # Store improvements
-- [ ] Prevent mixed React optimizer generations and verify store/seller rendering after reload.
+- [x] Prevent mixed React optimizer generations; verified repeated store/seller openings, seller login/reload and customized pickup order without runtime errors (15 tests passed).
 - [x] Add editable categories and scoped extras in seller screens.
 - [x] Add product customization popup, cart pricing and order extra details.
 - [x] Remove duplicate hours, holiday banner and public seller link; show automatic status.
