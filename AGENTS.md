@@ -17,3 +17,4 @@
 - Keep editable categories and scoped extras in the existing store, normalizing older saved state, so existing demo catalogs survive upgrades.
 - Identify cart lines by product plus extra quantities and snapshot extras in orders; customized variants must not merge or lose fulfillment details.
 - Calculate storefront status from Brasília-time weekly/special hours, ignoring legacy manual overrides, so the indicator follows the registered schedule.
+- Reject outdated Vite optimized-dependency requests and pre-optimize the product dialog; mixing optimizer generations can load different React dispatchers and blank the preview.

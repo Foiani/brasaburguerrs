@@ -7,6 +7,14 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
+  vite: {
+    optimizeDeps: {
+      // Reject stale optimizer hashes instead of mixing old ReactDOM with new React.
+      // Vite's client reloads when an outdated optimized dependency is requested.
+      ignoreOutdatedRequests: false,
+      include: ["@radix-ui/react-dialog"],
+    },
+  },
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
