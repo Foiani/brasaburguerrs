@@ -25,7 +25,7 @@ export function Products() {
         <Field label="Nome"><input className="field" required value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
         <Field label="Preço (R$)"><input className="field" type="number" min="0.01" step="0.01" required value={draft.price} onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) })} /></Field>
         <Field label="Categoria"><select className="field" value={draft.category} onChange={(e) => { const category = CATEGORIES.find((c) => c === e.target.value); if (category) setDraft({ ...draft, category }); }}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
-        <Field label="Foto (URL)"><input className="field" type="url" value={draft.images[0] ?? ""} onChange={(e) => setDraft({ ...draft, images: e.target.value ? [e.target.value, ...draft.images.slice(1)] : [] })} /></Field>
+        <Field label="Foto (URL)"><input className="field" value={draft.images[0] ?? ""} onChange={(e) => setDraft({ ...draft, images: e.target.value ? [e.target.value, ...draft.images.slice(1)] : [] })} /></Field>
       </div>
       <Field label="Descrição"><textarea className="field" rows={3} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></Field>
       <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={draft.available} onChange={(e) => setDraft({ ...draft, available: e.target.checked })} />Disponível</label>
