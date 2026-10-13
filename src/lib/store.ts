@@ -8,7 +8,7 @@ import refri from "@/assets/p-refri.jpg";
 import brownie from "@/assets/p-brownie.jpg";
 
 export const CATEGORIES = ["Hambúrgueres", "Combos", "Acompanhamentos", "Bebidas", "Sobremesas"] as const;
-export type Category = (typeof CATEGORIES)[number];
+export type Category = string;
 export const PAYMENTS = ["Pix", "Cartão", "Dinheiro"] as const;
 export type Payment = (typeof PAYMENTS)[number];
 export const STATUSES = ["Novo", "Em preparo", "Saiu para entrega", "Entregue", "Cancelado"] as const;
@@ -22,7 +22,9 @@ export type Product = {
   id: string; name: string; description: string; price: number;
   category: Category; available: boolean; images: string[];
 };
-export type OrderItem = { productId: string; name: string; price: number; qty: number };
+export type Extra = { id: string; name: string; price: number; productIds: string[]; categories: string[] };
+export type SelectedExtra = { id: string; name: string; price: number; qty: number };
+export type OrderItem = { productId: string; name: string; price: number; qty: number; extras?: SelectedExtra[] };
 export type Order = {
   id: string; createdAt: string; customer: string; phone: string; address: string;
   pickup: boolean; payment: Payment; items: OrderItem[]; notes: string;
@@ -33,7 +35,23 @@ export type Settings = {
   minOrder: number; areas: string; pickup: boolean; address: string; instagram: string;
   override: null | "closed" | "open"; hours: DayHours[]; specials: Special[]; delivery?: DeliverySettings;
 };
-export type State = { settings: Settings; products: Product[]; orders: Order[] };
+export type State = { settings: Settings; products: Product[]; orders: Order[]; categories: string[]; extras: Extra[] };
+
+export const extrasFor = (product: Product, extras: Extra[]) => extras.filter((e) => e.productIds.includes(product.id) || e.categories.includes(product.category));
+export const itemPrice = (price: number, extras: SelectedExtra[]) => Math.round((price + extras.reduce((sum, e) => sum + e.price * e.qty, 0)) * 100) / 100;
+export const variantKey = (productId: string, extras: SelectedExtra[]) => JSON.stringify([productId, extras.map((e) => [e.id, e.qty]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))]);
+
+export function normalizeState(saved: State): State {
+  return { ...saved, categories: saved.categories ?? [...new Set([...CATEGORIES, ...saved.products.map((p) => p.category)])], extras: saved.extras ?? [] };
+}
+
+export function renameCategory(s: State, previous: string, next: string): State {
+  return { ...s, categories: s.categories.map((c) => c === previous ? next : c), products: s.products.map((p) => p.category === previous ? { ...p, category: next } : p), extras: s.extras.map((e) => ({ ...e, categories: e.categories.map((c) => c === previous ? next : c) })) };
+}
+
+export function removeCategory(s: State, category: string, replacement: string): State {
+  return { ...s, categories: s.categories.filter((c) => c !== category), products: s.products.map((p) => p.category === category ? { ...p, category: replacement } : p), extras: s.extras.map((e) => ({ ...e, categories: e.categories.filter((c) => c !== category) })) };
+}
 
 export const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -85,7 +103,7 @@ function seedOrders(): Order[] {
 }
 
 const KEY = "brasa-burger-v1";
-const serverState: State = { settings: seedSettings, products: seedProducts, orders: [] };
+const serverState: State = { settings: seedSettings, products: seedProducts, orders: [], categories: [...CATEGORIES], extras: [] };
 let state: State = serverState;
 let loaded = false;
 const listeners = new Set<() => void>();
@@ -95,11 +113,11 @@ function load() {
   loaded = true;
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) state = JSON.parse(raw);
+    if (raw) state = normalizeState(JSON.parse(raw));
     else { state = { ...serverState, orders: seedOrders() }; persist(); }
   } catch { state = { ...serverState, orders: seedOrders() }; }
   window.addEventListener("storage", (e) => {
-    if (e.key === KEY && e.newValue) { state = JSON.parse(e.newValue); listeners.forEach((l) => l()); }
+    if (e.key === KEY && e.newValue) { try { state = normalizeState(JSON.parse(e.newValue)); listeners.forEach((l) => l()); } catch { /* Ignore malformed external storage. */ } }
   });
 }
 function persist() {
@@ -149,9 +167,8 @@ export type Status = { open: boolean; message: string; nextOpen?: string };
 export function storeStatus(s: Settings, d = new Date()): Status {
   const now = brNow(d);
   const today = scheduleFor(s, now.date, now.weekday);
-  if (s.override === "open") return { open: true, message: "Aberto agora" };
   const inShift = !today.closed && today.shifts.some((sh) => now.minutes >= toMin(sh.open) && now.minutes < toMin(sh.close));
-  if (s.override !== "closed" && inShift) {
+  if (inShift) {
     const sh = today.shifts.find((x) => now.minutes >= toMin(x.open) && now.minutes < toMin(x.close));
     if (sh) return { open: true, message: `Aberto agora · até ${sh.close}` };
   }

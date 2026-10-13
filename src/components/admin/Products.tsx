@@ -2,13 +2,13 @@ import { useState } from "react";
 import { Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { Button } from "@/components/Button";
 import { Field } from "@/components/Field";
-import { CATEGORIES, brl, setState, uid, useStore, type Product } from "@/lib/store";
+import { brl, setState, uid, useStore, type Product } from "@/lib/store";
 
 export function Products() {
-  const { products } = useStore();
+  const { products, categories } = useStore();
   const [draft, setDraft] = useState<Product | null>(null);
   const save = () => {
-    if (!draft) return;
+    if (!draft || !draft.name.trim() || !categories.includes(draft.category)) return;
     const product = { ...draft, name: draft.name.trim(), description: draft.description.trim() };
     setState((s) => ({ ...s, products: s.products.some((p) => p.id === product.id) ? s.products.map((p) => p.id === product.id ? product : p) : [...s.products, product] }));
     setDraft(null);
@@ -17,14 +17,14 @@ export function Products() {
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h1 className="text-3xl font-extrabold">Produtos</h1>
-      <Button onClick={() => setDraft({ id: uid(), name: "", description: "", price: 0, category: "Hambúrgueres", available: true, images: [] })}><Plus className="h-4 w-4" />Novo produto</Button>
+      <Button disabled={!categories.length} onClick={() => setDraft({ id: uid(), name: "", description: "", price: 0, category: categories[0] ?? "", available: true, images: [] })}><Plus className="h-4 w-4" />Novo produto</Button>
     </div>
     {draft && <form className="space-y-4 border-b pb-5" onSubmit={(e) => { e.preventDefault(); save(); }}>
       <h2 className="text-xl font-bold">Editar produto</h2>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Nome"><input className="field" required value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
         <Field label="Preço (R$)"><input className="field" type="number" min="0.01" step="0.01" required value={draft.price} onChange={(e) => setDraft({ ...draft, price: Number(e.target.value) })} /></Field>
-        <Field label="Categoria"><select className="field" value={draft.category} onChange={(e) => { const category = CATEGORIES.find((c) => c === e.target.value); if (category) setDraft({ ...draft, category }); }}>{CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></Field>
+        <Field label="Categoria"><select className="field" required value={draft.category} onChange={(e) => setDraft({ ...draft, category: e.target.value })}>{categories.map((c) => <option key={c}>{c}</option>)}</select></Field>
         <Field label="Foto (URL)"><input className="field" value={draft.images[0] ?? ""} onChange={(e) => setDraft({ ...draft, images: e.target.value ? [e.target.value, ...draft.images.slice(1)] : [] })} /></Field>
       </div>
       <Field label="Descrição"><textarea className="field" rows={3} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></Field>
