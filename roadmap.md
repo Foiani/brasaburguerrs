@@ -1,8 +1,8 @@
 # Store improvements
-- [ ] Add editable categories and scoped extras in seller screens.
-- [ ] Add product customization popup, cart pricing and order extra details.
-- [ ] Remove duplicate hours, holiday banner and public seller link; show automatic status.
-- [ ] Verify seller-to-customer-to-order flow and regression tests.
+- [x] Add editable categories and scoped extras in seller screens.
+- [x] Add product customization popup, cart pricing and order extra details.
+- [x] Remove duplicate hours, holiday banner and public seller link; show automatic status.
+- [x] Verify seller-to-customer-to-order flow and regression tests (15 tests; persistent catalog, customized variants, R$102 pickup order readback, narrow dialog, no runtime errors).
 
 # Delivery calculation
 - [x] Connect Google Maps and protect delivery lookups with a checkout session.
