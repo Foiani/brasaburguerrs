@@ -1,3 +1,9 @@
+# Store improvements
+- [ ] Add editable categories and scoped extras in seller screens.
+- [ ] Add product customization popup, cart pricing and order extra details.
+- [ ] Remove duplicate hours, holiday banner and public seller link; show automatic status.
+- [ ] Verify seller-to-customer-to-order flow and regression tests.
+
 # Delivery calculation
 - [x] Connect Google Maps and protect delivery lookups with a checkout session.
 - [x] Add pricing models and seller delivery settings using the existing store API.
