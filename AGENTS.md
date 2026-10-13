@@ -11,3 +11,6 @@
 
 - Keep seller product and store-settings editors in `src/components/admin`, using the existing store API so seller and customer views stay consistent.
 - Use `src/components/Button.tsx` for new interactive commands to preserve the existing semantic button styles.
+- Keep delivery pricing pure in `src/lib/delivery.ts` and Maps calls in `delivery.functions.ts`, protected by an encrypted temporary checkout cookie and existing CSRF middleware, so secrets never enter the browser.
+- Delivery ranges are lower-inclusive and upper-exclusive except for the last upper boundary; compare full driving distances before rounding currency to avoid ambiguous boundary charges.
+- Keep delivery settings on the existing store API; it remains browser-local demo persistence until seller authentication and shared store persistence are explicitly migrated.
