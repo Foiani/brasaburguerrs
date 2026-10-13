@@ -35,7 +35,6 @@ export function StoreSettings() {
     </div>
     <Field label="Áreas atendidas"><textarea className="field" value={draft.areas} onChange={(e) => setDraft({ ...draft, areas: e.target.value })} /></Field>
     <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={draft.pickup} onChange={(e) => setDraft({ ...draft, pickup: e.target.checked })} />Retirada no local</label>
-    <Field label="Funcionamento"><select className="field" value={draft.override ?? "auto"} onChange={(e) => setDraft({ ...draft, override: e.target.value === "open" ? "open" : e.target.value === "closed" ? "closed" : null })}><option value="auto">Seguir horários</option><option value="open">Aberto manualmente</option><option value="closed">Fechado manualmente</option></select></Field>
     <section className="space-y-3">
       <h2 className="text-xl font-bold">Horários de funcionamento</h2>
       {draft.hours.map((day, index) => <div key={index} className="space-y-2 border-b py-3">

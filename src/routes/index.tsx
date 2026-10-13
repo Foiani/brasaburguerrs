@@ -1,14 +1,15 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/Button";
+import { ProductOptions } from "@/components/ProductOptions";
 import { calculateDelivery, type DeliveryLocation } from "@/lib/delivery";
 import { getDeliveryDistance, startDeliverySession } from "@/lib/delivery.functions";
 import { ShoppingBag, Search, Plus, Minus, Trash2, X, Clock, Bike, Wallet, MapPin, Store, Instagram, Phone, CalendarClock } from "lucide-react";
 import hero from "@/assets/hero.jpg";
 import { Logo } from "@/components/Logo";
 import { useNow } from "@/hooks/use-now";
-import { CATEGORIES, PAYMENTS, WEEKDAYS, brNow, brl, scheduleFor, setState, storeStatus, uid, useStore, type Payment, type Product } from "@/lib/store";
+import { PAYMENTS, WEEKDAYS, brNow, brl, itemPrice, variantKey, setState, storeStatus, uid, useStore, type Payment, type Product, type SelectedExtra } from "@/lib/store";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -24,28 +25,32 @@ export const Route = createFileRoute("/")({
   component: Home,
 });
 
-type CartLine = { id: string; qty: number };
+type CartLine = { id: string; key: string; qty: number; extras: SelectedExtra[] };
 
 function Home() {
-  const { settings, products } = useStore();
+  const { settings, products, categories } = useStore();
   const now = useNow();
   const status = storeStatus(settings, now);
   const [cat, setCat] = useState<string>("Todos");
   const [q, setQ] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [open, setOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
-  const list = products.filter((p) => (cat === "Todos" || p.category === cat) && (p.name + p.description).toLowerCase().includes(q.toLowerCase()));
+  const activeCategory = categories.includes(cat) ? cat : "Todos";
+  const list = products.filter((p) => (activeCategory === "Todos" || p.category === activeCategory) && (p.name + p.description).toLowerCase().includes(q.toLowerCase()));
   const count = cart.reduce((s, l) => s + l.qty, 0);
-  const add = (p: Product) => setCart((c) => (c.find((l) => l.id === p.id) ? c.map((l) => (l.id === p.id ? { ...l, qty: l.qty + 1 } : l)) : [...c, { id: p.id, qty: 1 }]));
+  const add = (p: Product, extras: SelectedExtra[], qty: number) => {
+    const key = variantKey(p.id, extras);
+    setCart((c) => c.some((l) => l.key === key) ? c.map((l) => l.key === key ? { ...l, qty: l.qty + qty } : l) : [...c, { id: p.id, key, qty, extras }]);
+  };
 
   const today = brNow(now);
-  const upcoming = settings.specials.filter((s) => s.date >= today.date).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 3);
 
   return (
     <div className="min-h-screen">
-      <div role="status" aria-live="polite" className={`sticky top-0 z-40 py-1.5 text-center text-sm font-bold ${status.open ? "bg-success text-success-foreground" : "bg-destructive text-destructive-foreground"}`}>
-        ● {status.message}
+      <div role="status" aria-live="polite" className="sticky top-0 z-40 flex items-center justify-center gap-2 bg-card py-1.5 text-sm font-bold">
+        <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${status.open ? "bg-success" : "bg-destructive"}`} />{status.open ? "Loja Aberta" : "Loja Fechada"}
       </div>
       <header className="sticky top-8 z-30 border-b bg-background/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
@@ -66,12 +71,6 @@ function Home() {
           <a href="#cardapio">Cardápio</a><a href="#horarios">Horários</a><a href="#sobre">Sobre</a><a href="#contato">Contato</a>
         </nav>
       </header>
-
-      {upcoming.length > 0 && (
-        <div className="bg-accent px-4 py-2 text-center text-sm font-semibold text-accent-foreground">
-          {upcoming.map((s) => `📅 ${s.date.slice(8, 10)}/${s.date.slice(5, 7)}: ${s.note || (s.closed ? "estaremos fechados" : `horário especial ${s.shifts.map((x) => `${x.open}–${x.close}`).join(", ")}`)}`).join("  ·  ")}
-        </div>
-      )}
 
       <section id="topo" className="mx-auto max-w-6xl px-4 pt-6">
         <div className="relative overflow-hidden rounded-3xl">
@@ -100,8 +99,8 @@ function Home() {
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar..." className="field pl-10" />
           </label>
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {["Todos", ...CATEGORIES].map((c) => (
-              <button key={c} onClick={() => setCat(c)} className={`whitespace-nowrap rounded-full px-4 py-2 font-semibold ${cat === c ? "bg-primary text-primary-foreground" : "bg-card"}`}>{c}</button>
+            {["Todos", ...categories].map((c) => (
+              <Button key={c} variant={activeCategory === c ? "primary" : "ghost"} onClick={() => setCat(c)} className="whitespace-nowrap" aria-pressed={activeCategory === c}>{c}</Button>
             ))}
           </div>
         </div>
@@ -114,11 +113,11 @@ function Home() {
               </div>
               <div className="flex flex-1 flex-col p-5">
                 <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{p.category}</p>
-                <h3 className="text-xl font-extrabold">{p.name}</h3>
+                <h3 className="text-xl font-extrabold"><Button variant="ghost" className="justify-start border-0 bg-transparent p-0 text-left" disabled={!p.available} onClick={() => setSelectedProduct(p)}>{p.name}</Button></h3>
                 <p className="mt-1 flex-1 text-sm text-muted-foreground">{p.description}</p>
                 <div className="mt-4 flex items-center justify-between">
                   <span className="font-display text-2xl font-extrabold text-primary">{brl(p.price)}</span>
-                  <button className="btn" disabled={!p.available} onClick={() => add(p)}><Plus className="h-4 w-4" /> Adicionar</button>
+                   <Button disabled={!p.available} onClick={() => setSelectedProduct(p)}><Plus className="h-4 w-4" /> Adicionar</Button>
                 </div>
               </div>
             </article>
@@ -160,22 +159,18 @@ function Home() {
       </section>
 
       <footer id="contato" className="scroll-mt-32 bg-ink py-12 text-ink-foreground">
-        <div className="mx-auto grid max-w-6xl gap-8 px-4 md:grid-cols-3">
+         <div className="mx-auto grid max-w-6xl gap-8 px-4 md:grid-cols-2">
           <div><Logo name={settings.name} logo={settings.logo} /><p className="mt-3 text-sm opacity-80">{settings.address}</p></div>
-          <div className="text-sm">
-            <h3 className="mb-2 text-lg font-bold">Horários</h3>
-            {[1, 2, 3, 4, 5, 6, 0].map((wd) => { const h = settings.hours[wd]; return <p key={wd}>{WEEKDAYS[wd].slice(0, 3)}: {h.closed ? "Fechado" : h.shifts.map((s) => `${s.open}–${s.close}`).join(", ")}</p>; })}
-          </div>
           <div className="space-y-2 text-sm">
             <h3 className="mb-2 text-lg font-bold">Contato</h3>
             <a className="flex gap-2" href={`https://wa.me/${settings.whatsapp}`}><Phone className="h-4 w-4" /> WhatsApp</a>
             <a className="flex gap-2" href={`https://instagram.com/${settings.instagram.replace("@", "")}`}><Instagram className="h-4 w-4" /> {settings.instagram}</a>
-            <Link to="/vendedor" className="block pt-4 opacity-60 underline">Área do vendedor</Link>
           </div>
         </div>
       </footer>
 
       {open && <Cart cart={cart} setCart={setCart} onClose={() => setOpen(false)} status={status} />}
+      {selectedProduct && <ProductOptions key={selectedProduct.id} product={products.find((p) => p.id === selectedProduct.id) ?? selectedProduct} onClose={() => setSelectedProduct(null)} onAdd={add} />}
     </div>
   );
 }
@@ -229,10 +224,10 @@ function Cart({ cart, setCart, onClose, status }: { cart: CartLine[]; setCart: R
   const changeAddress = (address: string) => { requestId.current++; setCalculating(false); setQuote(null); setDeliveryError(""); setF({ ...f, address }); };
 
   const lines = useMemo(() => cart.flatMap((l) => { const p = products.find((p) => p.id === l.id); return p ? [{ ...l, p }] : []; }), [cart, products]);
-  const subtotal = lines.reduce((s, l) => s + l.p.price * l.qty, 0);
+   const subtotal = Math.round(lines.reduce((s, l) => s + itemPrice(l.p.price, l.extras) * l.qty, 0) * 100) / 100;
   const fee = f.pickup ? 0 : pricing?.allowed ? pricing.fee : 0;
   const total = subtotal + (lines.length ? fee : 0);
-  const qty = (id: string, d: number) => setCart((c) => c.map((l) => (l.id === id ? { ...l, qty: Math.max(1, l.qty + d) } : l)));
+   const qty = (key: string, d: number) => setCart((c) => c.map((l) => (l.key === key ? { ...l, qty: Math.max(1, l.qty + d) } : l)));
   const canOrder = status.open || f.schedule;
 
   const submit = () => {
@@ -245,11 +240,11 @@ function Cart({ cart, setCart, onClose, status }: { cart: CartLine[]; setCart: R
     if (subtotal < settings.minOrder) e.min = `Pedido mínimo de ${brl(settings.minOrder)}.`;
     setErrors(e);
     if (Object.keys(e).length) return;
-    const items = lines.map((l) => ({ productId: l.id, name: l.p.name, price: l.p.price, qty: l.qty }));
+     const items = lines.map((l) => ({ productId: l.id, name: l.p.name, price: itemPrice(l.p.price, l.extras), qty: l.qty, extras: l.extras }));
     setState((s) => ({ ...s, orders: [{ id: uid(), createdAt: new Date().toISOString(), customer: f.name, phone: f.phone, address: f.pickup ? "" : location?.address ?? f.address, pickup: f.pickup, payment: f.payment, items, notes, subtotal, fee, total, status: "Novo", distanceKm: f.pickup ? undefined : location?.distanceKm, neighborhood: f.pickup ? undefined : location?.neighborhood, scheduledFor: !status.open ? status.nextOpen : undefined }, ...s.orders] }));
     const msg = [
       `*Novo pedido – ${settings.name}*`,
-      ...items.map((i) => `${i.qty}x ${i.name} – ${brl(i.price * i.qty)}`),
+       ...items.map((i) => `${i.qty}x ${i.name} – ${brl(i.price * i.qty)}${i.extras.length ? `\n  Adicionais por unidade: ${i.extras.map((e) => `${e.qty}x ${e.name} (+ ${brl(e.price * e.qty)})`).join(", ")}` : ""}`),
       notes && `Obs.: ${notes}`,
       `Subtotal: ${brl(subtotal)}`, `Entrega: ${brl(fee)}`, `*Total: ${brl(total)}*`, "",
       `Nome: ${f.name}`, `Telefone: ${f.phone}`, f.pickup ? "Retirada no local" : `Endereço: ${location?.address ?? f.address}`,
@@ -272,18 +267,19 @@ function Cart({ cart, setCart, onClose, status }: { cart: CartLine[]; setCart: R
           {step === "cart" && lines.length > 0 && (
             <>
               {lines.map((l) => (
-                <div key={l.id} className="flex gap-3 rounded-2xl bg-card p-3">
+                 <div key={l.key} className="flex gap-3 rounded-lg bg-card p-3">
                   <img src={l.p.images[0]} alt={l.p.name} className="h-16 w-16 rounded-xl object-cover" />
-                  <div className="flex-1">
+                   <div className="min-w-0 flex-1">
                     <p className="font-bold">{l.p.name}</p>
-                    <p className="text-sm text-primary">{brl(l.p.price * l.qty)}</p>
+                     {l.extras.map((e) => <p key={e.id} className="break-words text-xs text-muted-foreground">+ {e.qty}x {e.name} por unidade · {brl(e.price * e.qty)}</p>)}
+                     <p className="text-sm text-primary">{brl(itemPrice(l.p.price, l.extras) * l.qty)}</p>
                     <div className="mt-1 flex items-center gap-2">
-                      <button aria-label="Diminuir" onClick={() => qty(l.id, -1)} className="btn-ghost h-9 min-h-0 w-9 p-0"><Minus className="h-4 w-4" /></button>
+                       <Button variant="ghost" aria-label="Diminuir" onClick={() => qty(l.key, -1)} className="h-9 min-h-0 w-9 p-0"><Minus className="h-4 w-4" /></Button>
                       <span className="w-6 text-center font-bold">{l.qty}</span>
-                      <button aria-label="Aumentar" onClick={() => qty(l.id, 1)} className="btn-ghost h-9 min-h-0 w-9 p-0"><Plus className="h-4 w-4" /></button>
+                       <Button variant="ghost" aria-label="Aumentar" onClick={() => qty(l.key, 1)} className="h-9 min-h-0 w-9 p-0"><Plus className="h-4 w-4" /></Button>
                     </div>
                   </div>
-                  <button aria-label="Remover item" onClick={() => setCart((c) => c.filter((x) => x.id !== l.id))} className="self-start p-2 text-destructive"><Trash2 className="h-5 w-5" /></button>
+                   <Button variant="ghost" aria-label="Remover item" onClick={() => setCart((c) => c.filter((x) => x.key !== l.key))} className="w-11 shrink-0 self-start p-0 text-destructive"><Trash2 className="h-5 w-5" /></Button>
                 </div>
               ))}
               <label className="block"><span className="font-semibold">Observações</span>

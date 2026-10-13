@@ -34,7 +34,7 @@ export function Orders() {
                 {STATUSES.map((s) => <option key={s}>{s}</option>)}
               </select>
             </div>
-            <ul className="mt-2 text-sm">{o.items.map((i, k) => <li key={k}>{i.qty}x {i.name}</li>)}</ul>
+             <ul className="mt-2 text-sm">{o.items.map((i, k) => <li key={k}>{i.qty}x {i.name} · {brl(i.price * i.qty)}{i.extras?.map((e) => <p key={e.id} className="break-words pl-3 text-xs text-muted-foreground">+ {e.qty}x {e.name} por unidade · {brl(e.price * e.qty)}</p>)}</li>)}</ul>
             {o.notes && <p className="mt-1 text-sm italic">Obs.: {o.notes}</p>}
             {!o.pickup && o.address && <p className="mt-1 text-sm text-muted-foreground">{o.address} · {o.phone}</p>}
           </article>

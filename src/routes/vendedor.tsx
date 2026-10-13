@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, LineChart, Package, ClipboardList, Settings as Cog, LogOut } from "lucide-react";
+import { LayoutDashboard, LineChart, Package, ClipboardList, Settings as Cog, LogOut, Tags, Plus } from "lucide-react";
+import { Button } from "@/components/Button";
+import { Categories, Extras } from "@/components/admin/CatalogSettings";
 import { Logo } from "@/components/Logo";
 import { Field } from "@/components/Field";
 import { Reports, Overview } from "@/components/admin/Reports";
@@ -34,6 +36,8 @@ const TABS = [
   { id: "faturamento", label: "Faturamento", icon: LineChart },
   { id: "pedidos", label: "Pedidos", icon: ClipboardList },
   { id: "produtos", label: "Produtos", icon: Package },
+  { id: "categorias", label: "Categorias", icon: Tags },
+  { id: "adicionais", label: "Adicionais", icon: Plus },
   { id: "config", label: "Loja", icon: Cog },
 ] as const;
 
@@ -55,8 +59,8 @@ function Vendor() {
           <span className={`rounded-full px-3 py-1 text-xs font-bold ${status.open ? "bg-success text-success-foreground" : "bg-destructive text-destructive-foreground"}`}>{status.open ? "Aberto" : "Fechado"}</span>
           <button className="btn-ghost" onClick={() => { sessionStorage.removeItem(SKEY); setAuth(false); }}><LogOut className="h-4 w-4" /> <span className="hidden sm:inline">Sair</span></button>
         </div>
-        <nav className="mx-auto hidden max-w-6xl gap-2 px-4 pb-3 md:flex">
-          {TABS.map((t) => <button key={t.id} onClick={() => setTab(t.id)} className={tab === t.id ? "btn" : "btn-ghost"}><t.icon className="h-4 w-4" />{t.label}</button>)}
+         <nav className="mx-auto hidden max-w-6xl flex-wrap gap-2 px-4 pb-3 md:flex">
+           {TABS.map((t) => <Button key={t.id} onClick={() => setTab(t.id)} variant={tab === t.id ? "primary" : "ghost"} aria-pressed={tab === t.id}><t.icon className="h-4 w-4" />{t.label}</Button>)}
         </nav>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-6">
@@ -64,13 +68,15 @@ function Vendor() {
         {tab === "faturamento" && <Reports />}
         {tab === "pedidos" && <Orders />}
         {tab === "produtos" && <Products />}
+        {tab === "categorias" && <Categories />}
+        {tab === "adicionais" && <Extras />}
         {tab === "config" && <StoreSettings />}
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t bg-card md:hidden">
+       <nav className="fixed inset-x-0 bottom-0 z-30 flex overflow-x-auto border-t bg-card md:hidden">
         {TABS.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`flex min-h-14 flex-col items-center justify-center gap-0.5 text-xs font-semibold ${tab === t.id ? "text-primary" : "text-muted-foreground"}`}>
+           <Button variant="ghost" key={t.id} onClick={() => setTab(t.id)} className={`min-h-14 min-w-20 flex-1 flex-col gap-0.5 rounded-none border-0 px-2 text-xs ${tab === t.id ? "text-primary" : "text-muted-foreground"}`} aria-pressed={tab === t.id}>
             <t.icon className="h-5 w-5" />{t.label}
-          </button>
+           </Button>
         ))}
       </nav>
     </div>
